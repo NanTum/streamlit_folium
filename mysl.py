@@ -27,7 +27,7 @@ def load_data(nrows):
 
 data = load_data(379772)
 
-sel = st.select_slider("Start/Stop", options=['start','stop'])
+sel = st.selectbox("Start/Stop", options=['start','stop'])
 if sel == 'start':
     lat_m="latstartl";lon_m="lonstartl";DATE_TIME = "timestart";
 else:
