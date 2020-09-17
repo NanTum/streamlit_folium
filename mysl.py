@@ -1,48 +1,84 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium as fo
-from streamlit_folium import folium_static
-import geopandas as gp
+import altair as alt
+import pydeck as pdk
 
-st.title('Streamlit with Folium')
+DATE_TIME = "timestart"
+st.title('Streamlit Bangkok')
 
 """
-## An easy way to create a website using Python
+## An example of geographic data in Bangkok
 """
 
-df = pd.read_csv('https://raw.githubusercontent.com/Maplub/MonthlyAirQuality/master/sensorlist.csv')
+@st.cache(persist=True,allow_output_mutation=True)
+def load_data(nrows):
+    df1 = pd.read_csv('https://raw.githubusercontent.com/Maplub/odsample/master/20190101.csv',header=0)
+    df2 = pd.read_csv('https://raw.githubusercontent.com/Maplub/odsample/master/20190102.csv',header=1)
+    df3 = pd.read_csv('https://raw.githubusercontent.com/Maplub/odsample/master/20190103.csv',header=1)
+    df4 = pd.read_csv('https://raw.githubusercontent.com/Maplub/odsample/master/20190104.csv',header=1)
+    df5 = pd.read_csv('https://raw.githubusercontent.com/Maplub/odsample/master/20190105.csv',header=1)
+    f=[df1,df2,df3,df4,df5]
+    data = pd.concat(f)
+    data=data.iloc[:,0:7]
+    lowercase = lambda x: str(x).lower()
+    data.rename(lowercase, axis="columns", inplace=True)
+    return data
+
+data = load_data(379772)
+
+sel = st.select_slider("Start/Stop", options=['start','stop'])
+if sel == 'start':
+    lat_m="latstartl";lon_m="lonstartl";DATE_TIME = "timestart";
+else:
+    lat_m="latstop";lon_m="lonstop";DATE_TIME = "timestop";
 
 
-st.write(df)
+hour = st.slider("Hour to look at", 0, 23, step=3)
+data[DATE_TIME] = pd.to_datetime(data[DATE_TIME])
+data = data[(data[DATE_TIME].dt.hour>=hour) & (data[DATE_TIME].dt.hour< hour+3)]
 
+st.subheader("Geo data between %i:00 and %i:00" % (hour, (hour + 3) % 24))
+midpoint = (np.average(data[lat_m]), np.average(data[lon_m]))
 
-crs = "EPSG:4326"
-geometry = gp.points_from_xy(df.lon,df.lat)
-geo_df  = gp.GeoDataFrame(df,crs=crs,geometry=geometry)
+st.write(pdk.Deck(
+    map_style="mapbox://styles/mapbox/light-v9",
+    initial_view_state={
+        "latitude": midpoint[0],
+        "longitude": midpoint[1],
+        "zoom": 10,
+        "pitch": 50
+    },
+    layers=[
+        pdk.Layer(
+            "HexagonLayer",
+            data=data,
+            get_position=[lon_m, lat_m],
+            radius=100,
+            elevation_scale=10,
+            elevation_range=[0, 1000],
+            pickable=True,
+            extruded=True
+        ),
+    ],
+))
 
-nan_boundary  = gp.read_file('https://github.com/Maplub/AirQualityData/blob/master/nan_shp_wgs84.zip?raw=true')
-nanall = nan_boundary.unary_union
+st.subheader("Breakdown by minute between %i:00 and %i:00" % (hour, (hour + 3) % 24))
+filtered = data[
+    (data[DATE_TIME].dt.hour >= hour) & (data[DATE_TIME].dt.hour < (hour + 3))
+]
+hist = np.histogram(filtered[DATE_TIME].dt.minute, bins=60, range=(0, 60))[0]
+chart_data = pd.DataFrame({"minute": range(60), "pickups": hist})
 
-nan_sta = geo_df.loc[geo_df.geometry.within(nanall)]
+st.altair_chart(alt.Chart(chart_data)
+    .mark_area(
+        interpolate='step-after',
+    ).encode(
+        x=alt.X("minute:Q", scale=alt.Scale(nice=False)),
+        y=alt.Y("pickups:Q"),
+        tooltip=['minute', 'pickups']
+    ), use_container_width=True)
 
-
-longitude = 100.819200
-latitude = 19.331900
-
-station_map = fo.Map(
-	location = [latitude, longitude], 
-	zoom_start = 10)
-
-latitudes = list(nan_sta.lat)
-longitudes = list(nan_sta.lon)
-labels = list(nan_sta.name)
-
-for lat, lng, label in zip(latitudes, longitudes, labels):
-	fo.Marker(
-		location = [lat, lng], 
-		popup = label,
-		icon = fo.Icon(color='red', icon='heart')
-	).add_to(station_map)
-
-folium_static(station_map)
+if st.checkbox("Show raw data", False):
+    st.subheader("Raw data by minute between %i:00 and %i:00" % (hour, (hour + 3) % 24))
+    st.write(data)
