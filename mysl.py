@@ -82,3 +82,6 @@ st.altair_chart(alt.Chart(chart_data)
 if st.checkbox("Show raw data", False):
     st.subheader("Raw data by minute between %i:00 and %i:00" % (hour, (hour + 3) % 24))
     st.write(data)
+
+    
+## ref. https://github.com/streamlit/demo-uber-nyc-pickups
